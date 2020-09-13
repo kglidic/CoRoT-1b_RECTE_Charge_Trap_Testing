@@ -14,7 +14,7 @@ from tshirt.pipeline import spec_pipeline
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
-get_ipython().run_line_magic('matplotlib', 'inline')
+#get_ipython().run_line_magic('matplotlib', 'inline')
 
 #import bokeh to enable interactive plots
 from bokeh.plotting import figure
