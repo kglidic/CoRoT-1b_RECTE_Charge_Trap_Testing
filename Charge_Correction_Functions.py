@@ -294,7 +294,7 @@ def calculate_correction(csv_file,median_image):
         # ax.plot(tExp, obs, '.', color='0.8', ms=1)
         ramps[i, :] = obs
     ax.plot(tExp, ramps[30, :], '.')
-    plt.show()
+    #plt.show()
     return ramps
 
 
