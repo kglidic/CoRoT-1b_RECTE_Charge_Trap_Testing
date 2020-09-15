@@ -13,6 +13,8 @@ __author__ = 'Kayli Glidic'
 
 
 #import the module
+import os
+os.environ['TSHIRT_DATA'] = '.'
 from tshirt.pipeline import spec_pipeline
 
 import matplotlib.pyplot as plt
