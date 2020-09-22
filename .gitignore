@@ -1,0 +1,8 @@
+__pycache__/
+plots/
+tser_data/dynamic_spec/
+tser_data/spec/spec_corot1_visit1_corrected.fits
+tser_data/spec/spec_corot1_visit2_corrected.fits
+tser_data/spec/spec_corot1_visit3_corrected.fits
+tser_data/spec/spec_corot1_visit4_corrected.fits
+tser_data/wavebin_spec/
