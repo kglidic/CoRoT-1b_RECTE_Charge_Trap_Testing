@@ -15,7 +15,10 @@ __author__ = 'Kayli Glidic'
 #import the module
 import os
 os.environ['TSHIRT_DATA'] = '.'
-from tshirt.pipeline import spec_pipeline
+try:
+    from tshirt.pipeline import spec_pipeline
+except ImportError:
+    print("Tshirt not loaded. Some functions may not work")
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
