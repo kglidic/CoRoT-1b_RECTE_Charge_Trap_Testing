@@ -1,8 +1,13 @@
 procFiles: 
-    - /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit1/*_flt.fits ## files on which to do spec extraction
-    - /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit2/*_flt.fits ## files on which to do spec extraction
-    - /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit3/*_flt.fits ## files on which to do spec extraction
-    - /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit4/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit1/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit2/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit3/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit4/*_flt.fits ## files on which to do spec extraction
+   - /fenrirdata1/es_tso/hst/visit01/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit02/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit03/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit04/*_flt.fits
+
 excludeList:
    - ibh717giq_flt.fits
    - ibh719gkq_flt.fits
