@@ -9,8 +9,11 @@ from __future__ import division, absolute_import
 from __future__ import print_function
 import itertools
 
-from tshirt.pipeline import spec_pipeline
-
+try:
+    from tshirt.pipeline import spec_pipeline
+except ImportError:
+    print("Tshirt not loaded. Some functions may not work")
+    
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
