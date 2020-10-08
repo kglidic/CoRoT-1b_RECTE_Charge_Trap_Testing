@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[2]:
-
-
 #import the module
 from __future__ import division, absolute_import
 from __future__ import print_function
@@ -37,7 +34,7 @@ from astropy.io import fits, ascii
 from astropy.table import Table, join
 import pandas as pd
 from astropy.time import Time
-
+import time
 
 #import to copy
 from copy import deepcopy
@@ -52,11 +49,6 @@ import pdb
 #to correct for time differences
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import EarthLocation
-
-
-# # Applying RECTE
-
-# In[305]:
 
 
 #! /usr/bin/env python
@@ -76,9 +68,8 @@ def RECTE(
         mode='staring'
 ):
     """Hubble Space Telescope ramp effet model
-
     Parameters:
-    cRates -- intrinsic count rate of each exposures, unit e/s
+    cRates -- intrinsic count rate of each exposures, unit e/s. Is now a 2D array
     tExp -- start time of every exposures
     expTime -- (default 180 seconds) exposure time of the time series
     trap_pop -- (default 0) number of occupied traps at the beginning of the observations
@@ -120,36 +111,48 @@ def RECTE(
         dTrap_f = itertools.cycle([dTrap_f])
         dTrap_s = itertools.cycle([dTrap_s])
         dt0 = itertools.cycle([dt0])
-    obsCounts = np.zeros(len(tExp))
+    #create an obsCounts array the same size as the cRates array
+    obsCounts = np.zeros_like(cRates)
     trap_pop_s = min(trap_pop_s, nTrap_s)
     trap_pop_f = min(trap_pop_f, nTrap_f)
     dEsList = np.zeros(len(tExp))
     dEfList = np.zeros(len(tExp))
     dt0_i = next(dt0)
-    f0 = cRates[0]
+    #cRates has the time element along the y-direction (the rows) and the pixels data along the x-direction (the columns)
+    f0 = cRates[0] #grabs the first element(a 1D array) of the 2D array
+    
     c1_s = eta_trap_s * f0 / nTrap_s + 1 / tau_trap_s  # a key factor
     c1_f = eta_trap_f * f0 / nTrap_f + 1 / tau_trap_f
+    
     dE0_s = (eta_trap_s * f0 / c1_s - trap_pop_s) * (1 - np.exp(-c1_s * dt0_i))
     dE0_f = (eta_trap_f * f0 / c1_f - trap_pop_f) * (1 - np.exp(-c1_f * dt0_i))
-    dE0_s = min(trap_pop_s + dE0_s, nTrap_s) - trap_pop_s
-    dE0_f = min(trap_pop_f + dE0_f, nTrap_f) - trap_pop_f
-    trap_pop_s = min(trap_pop_s + dE0_s, nTrap_s)
-    trap_pop_f = min(trap_pop_f + dE0_f, nTrap_f)
+    
+    #np.minimum will compare each element of the array to the constant value of nTrap_s returning a minimum of the array element-wise
+    dE0_s = np.minimum(trap_pop_s + dE0_s, nTrap_s) - trap_pop_s
+    dE0_f = np.minimum(trap_pop_f + dE0_f, nTrap_f) - trap_pop_f
+    trap_pop_s = np.minimum(trap_pop_s + dE0_s, nTrap_s)
+    trap_pop_f = np.minimum(trap_pop_f + dE0_f, nTrap_f)
+
+    
+    #for loop over the time element
     for i in range(len(tExp)):
         try:
             dt = tExp[i+1] - tExp[i]
         except IndexError:
             dt = exptime
+        # cRates[i] will sequently grab each element(a 1D array)in the 2D array. 
         f_i = cRates[i]
         c1_s = eta_trap_s * f_i / nTrap_s + 1 / tau_trap_s  # a key factor
         c1_f = eta_trap_f * f_i / nTrap_f + 1 / tau_trap_f
         # number of trapped electron during one exposure
         dE1_s = (eta_trap_s * f_i / c1_s - trap_pop_s) * (1 - np.exp(-c1_s * exptime))
         dE1_f = (eta_trap_f * f_i / c1_f - trap_pop_f) * (1 - np.exp(-c1_f * exptime))
-        dE1_s = min(trap_pop_s + dE1_s, nTrap_s) - trap_pop_s
-        dE1_f = min(trap_pop_f + dE1_f, nTrap_f) - trap_pop_f
-        trap_pop_s = min(trap_pop_s + dE1_s, nTrap_s)
-        trap_pop_f = min(trap_pop_f + dE1_f, nTrap_f)
+        dE1_s = np.minimum(trap_pop_s + dE1_s, nTrap_s)- trap_pop_s
+        dE1_f = np.minimum(trap_pop_f + dE1_f, nTrap_f)- trap_pop_f
+        trap_pop_s = np.minimum(trap_pop_s + dE1_s, nTrap_s)
+        trap_pop_f = np.minimum(trap_pop_f + dE1_f, nTrap_f)
+        
+        #obsCount for each 1D array element from the 2D array
         obsCounts[i] = f_i * exptime - dE1_s - dE1_f
         if dt < 5 * exptime:  # whether next exposure is in next batch of exposures
             # same orbits
@@ -167,33 +170,29 @@ def RECTE(
                 # others, same as scanning
                 dE2_s = - trap_pop_s * (1 - np.exp(-(dt - exptime)/tau_trap_s))
                 dE2_f = - trap_pop_f * (1 - np.exp(-(dt - exptime)/tau_trap_f))
-            trap_pop_s = min(trap_pop_s + dE2_s, nTrap_s)
-            trap_pop_f = min(trap_pop_f + dE2_f, nTrap_f)
+            trap_pop_s = np.minimum(trap_pop_s + dE2_s, nTrap_s)
+            trap_pop_f = np.minimum(trap_pop_f + dE2_f, nTrap_f)
         elif dt < 1200:
-            trap_pop_s = min(trap_pop_s * np.exp(-(dt-exptime)/tau_trap_s), nTrap_s)
-            trap_pop_f = min(trap_pop_f * np.exp(-(dt-exptime)/tau_trap_f), nTrap_f)
+            trap_pop_s = np.minimum(trap_pop_s * np.exp(-(dt-exptime)/tau_trap_s),nTrap_s)
+            trap_pop_f = np.minimum(trap_pop_f * np.exp(-(dt-exptime)/tau_trap_f),nTrap_f)
         else:
             # switch orbit
             dt0_i = next(dt0)
-            trap_pop_s = min(trap_pop_s * np.exp(-(dt-exptime-dt0_i)/tau_trap_s) + next(dTrap_s), nTrap_s)
-            trap_pop_f = min(trap_pop_f * np.exp(-(dt-exptime-dt0_i)/tau_trap_f) + next(dTrap_f), nTrap_f)
-            f_i = cRates[i + 1]
+            trap_pop_s = np.minimum(trap_pop_s * np.exp(-(dt-exptime-dt0_i)/tau_trap_s) + next(dTrap_s), nTrap_s)
+            trap_pop_f = np.minimum(trap_pop_f * np.exp(-(dt-exptime-dt0_i)/tau_trap_f) + next(dTrap_f), nTrap_f)
+            f_i = cRates[i+1]
             c1_s = eta_trap_s * f_i / nTrap_s + 1 / tau_trap_s  # a key factor
             c1_f = eta_trap_f * f_i / nTrap_f + 1 / tau_trap_f
             dE3_s = (eta_trap_s * f_i / c1_s - trap_pop_s) * (1 - np.exp(-c1_s * dt0_i))
             dE3_f = (eta_trap_f * f_i / c1_f - trap_pop_f) * (1 - np.exp(-c1_f * dt0_i))
-            dE3_s = min(trap_pop_s + dE3_s, nTrap_s) - trap_pop_s
-            dE3_f = min(trap_pop_f + dE3_f, nTrap_f) - trap_pop_f
-            trap_pop_s = min(trap_pop_s + dE3_s, nTrap_s)
-            trap_pop_f = min(trap_pop_f + dE3_f, nTrap_f)
-        trap_pop_s = max(trap_pop_s, 0)
-        trap_pop_f = max(trap_pop_f, 0)
+            dE3_s = np.minimum(trap_pop_s + dE3_s, nTrap_s) - trap_pop_s
+            dE3_f = np.minimum(trap_pop_f + dE3_f, nTrap_f) - trap_pop_f
+            trap_pop_s = np.minimum(trap_pop_s + dE3_s, nTrap_s)
+            trap_pop_f = np.minimum(trap_pop_f + dE3_f, nTrap_f)
+        trap_pop_s = np.maximum(trap_pop_s, 0)
+        trap_pop_f = np.maximum(trap_pop_f, 0)
 
     return obsCounts
-
-
-# In[306]:
-
 
 def RECTEMulti(template,
                  variability,
@@ -209,7 +208,6 @@ def RECTEMulti(template,
     calculate for 6 orbit
     return
     model light curves
-
     template -- a template image of the input sereis
     variablities -- normalized model light curves
     tExp -- starting times of each exposure of the time resolved observations
@@ -224,12 +222,10 @@ def RECTEMulti(template,
         -- fast population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
     """
-    specShape = template.shape #shape of template image of the input sereis. it gives the dimensions of an array 
-    outSpec = np.zeros((specShape[0], len(tExp))) #specShape[0] gives the number of rows, this is the shape of this new array. this would return something like : array([0, 0, 0, 0, 0]) but with a length desired. 
-    
-    for i in range(specShape[0]):
-        outSpec[i, :] = RECTE(
-            variability * template[i],
+    #multiplies outter product of two vectors out[i, j] = variability[i] * template[j]
+    rates2D = np.outer(variability,template)
+    outSpec = RECTE(
+            rates2D,
             tExp,
             exptime,
             trap_pop_s,
@@ -239,11 +235,8 @@ def RECTEMulti(template,
             dt0=dt0,
             lost=0,
             mode=mode)
-    return np.sum(outSpec, axis=(0))
-
-
-# In[307]:
-
+    #transpose the array in order to sum along the zero axis. 
+    return np.sum(outSpec.transpose(),axis=0)
 
 def calculate_correction(csv_file,median_image):
     '''
@@ -299,10 +292,6 @@ def calculate_correction(csv_file,median_image):
     ax.plot(tExp, ramps[30, :], '.')
     plt.show()
     return ramps
-
-
-# In[308]:
-
 
 def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,xList=np.arange(0,13)):
     '''
@@ -363,10 +352,6 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
         ramps[i, :] = obs
     return ramps
 
-
-# In[309]:
-
-
 def charge_correction(self,ramps):
     '''
     Returns the ramp corrected flux data 
@@ -395,10 +380,3 @@ def charge_correction(self,ramps):
 
     
     return newData,new_spec
-
-
-# In[ ]:
-
-
-
-
