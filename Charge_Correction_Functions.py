@@ -371,14 +371,11 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
     
     ## Divide by aperture sum and exptime to normalize
     template_sum = np.nansum(template2D,axis=0)
-    ## Make it an array that is NY, NTime
+    ## Make the template_sum an array that is NY, NTime
     template_sum_time = np.tile(template_sum,[nTime,1]).transpose()
     
     
     ramps = obs2D_sum / exptime / template_sum_time
-    
-    #ramps = np.zeros((len(xList), len(tExp)))
-    
     
     
     return ramps
