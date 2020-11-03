@@ -203,7 +203,7 @@ def RECTEMulti(template,
                  dTrap_s=0,
                  dTrap_f=0,
                  dt0=0,
-                 mode='staring'):
+                 mode='staring',doSum=False):
     """loop through every pixel in the template
     calculate for 6 orbit
     return
@@ -221,6 +221,7 @@ def RECTEMulti(template,
          trapped charge carriers added in the middle of two orbits
         -- fast population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
+    doSum -- Sum the effect of all pixels?
     """
     #multiplies outter product of two vectors out[i, j] = variability[i] * template[j]
     rates2D = np.outer(variability,template)
@@ -236,7 +237,10 @@ def RECTEMulti(template,
             lost=0,
             mode=mode)
     #transpose the array in order to sum along the zero axis. 
-    return np.sum(outSpec.transpose(),axis=0)
+    if doSum == True:
+        return np.sum(outSpec.transpose(),axis=0)
+    else:
+        return outSpec.transpose()
 
 def calculate_correction(csv_file,median_image):
     '''
@@ -325,31 +329,55 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
     # cRates = np.ones(len(LC)) * LC.mean() * 1.002
     cRates = np.ones(len(tExp))
     variability = cRates / cRates.mean()
+    
+    nTime = len(variability)
+    
     im = median_image
    # bbox = [0, 128, 59, 89]  # define the bounding box of the area of interest
     bbox = [0, 128, 69, 79]
     xList = xList
-    ramps = np.zeros((len(xList), len(tExp)))
+    
     dTrap_fList = [0]
     dTrap_sList = [0]
     dtList = [0]
     full_well = 8e4
-    for i, x in enumerate(xList):
-        template = im[bbox[2]:bbox[3], x]
-        for j, flux in enumerate(template):
-            if flux * exptime > full_well:
-                template[j] = full_well / exptime
-
-        obs = RECTEMulti(template, variability, tExp, exptime,
-                         dTrap_f=dTrap_fList,
-                         dTrap_s=dtrap_s,
-                         trap_pop_f=0,
-                         trap_pop_s=trap_pop_s,
-                         dt0=dtList,
-                         mode='staring')
-        obs = obs / exptime / np.nansum(template)
-        # ax.plot(tExp, obs, '.', color='0.8', ms=1)
-        ramps[i, :] = obs
+    
+    
+    ## Make a 2D cutout of pixels of interest
+    template2D = im[bbox[2]:bbox[3], xList[0]:xList[-1]+1]
+    nY = (bbox[3] - bbox[2])
+    nX = (xList[-1] - xList[0]) + 1
+    
+    ## Cap all values at the full well value, which physically shouldn't be exceeded
+    high_points = (template2D > full_well / exptime) ## find points
+    template2D[high_points] = full_well / exptime ## set those points to full well
+    
+    template1D = template2D.ravel()
+    
+    ## Calculate RECTE corection for all pixels
+    obs1D_time = RECTEMulti(template1D, variability, tExp, exptime,
+                            dTrap_f=dTrap_fList,
+                            dTrap_s=dtrap_s,
+                            trap_pop_f=0,
+                            trap_pop_s=trap_pop_s,
+                            dt0=dtList,
+                            mode='staring',doSum=False)
+    
+    
+    ## Reshape to NY, NX, NTime
+    obs2D = np.reshape(obs1D_time,[nY,nX,nTime])
+    ## Do aperture sum along Y direction
+    obs2D_sum = np.sum(obs2D,axis=0)
+    
+    ## Divide by aperture sum and exptime to normalize
+    template_sum = np.nansum(template2D,axis=0)
+    ## Make the template_sum an array that is NY, NTime
+    template_sum_time = np.tile(template_sum,[nTime,1]).transpose()
+    
+    
+    ramps = obs2D_sum / exptime / template_sum_time
+    
+    
     return ramps
 
 def charge_correction(self,ramps):
