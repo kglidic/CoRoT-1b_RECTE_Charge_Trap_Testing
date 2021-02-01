@@ -297,7 +297,7 @@ def calculate_correction(csv_file,median_image):
     plt.show()
     return ramps
 
-def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,xList=np.arange(0,13)):
+def calculate_correction_fast(x,exptime,median_image,dTrap_s=[0],trap_pop_s=200,dTrap_f=[0],trap_pop_f=0,xList=np.arange(0,13)):
     '''
     Calculate the RECTE ramp correction: fast-version 
     
@@ -314,6 +314,9 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
     
     trap_pop_s: int
         (default=0)number of initially occupied traps -- slow poplulation
+        
+    trap_pop_f: int
+        (default=0)number of initially occupied traps -- fast poplulation
    
     dTrap_s: int
         (default=0, can be either number or list) number of extra
@@ -321,10 +324,17 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
         -- slow population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
         
+    dTrap_f: int
+        (default=0, can be either number or list) number of extra
+         trapped charge carriers added in the middle of two orbits
+        -- fast population. If it is a number, it assumes that all
+        the extra added trap charge carriers are the same
+        
     xList: list 
         A list on the range of Dispersion
     
     '''
+    
     tExp=(x-x[0])*3600*24
     # cRates = np.ones(len(LC)) * LC.mean() * 1.002
     cRates = np.ones(len(tExp))
@@ -337,8 +347,8 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
     bbox = [0, 128, 69, 79]
     xList = xList
     
-    dTrap_fList = [0]
-    dTrap_sList = [0]
+    #dTrap_fList = [0]
+    #dTrap_sList = [0]
     dtList = [0]
     full_well = 8e4
     
@@ -356,9 +366,9 @@ def calculate_correction_fast(x,exptime,median_image,dtrap_s=[0],trap_pop_s=200,
     
     ## Calculate RECTE corection for all pixels
     obs1D_time = RECTEMulti(template1D, variability, tExp, exptime,
-                            dTrap_f=dTrap_fList,
-                            dTrap_s=dtrap_s,
-                            trap_pop_f=0,
+                            dTrap_f=dTrap_f,
+                            dTrap_s=dTrap_s,
+                            trap_pop_f=trap_pop_f,
                             trap_pop_s=trap_pop_s,
                             dt0=dtList,
                             mode='staring',doSum=False)
