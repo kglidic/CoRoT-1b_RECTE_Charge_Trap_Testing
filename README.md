@@ -1,5 +1,6 @@
 # CoRoT-1b_RECTE_Charge_Trap_Testing
-This respiratory contains files for correcting the charge trap effects on the CoRoT-1b Data and the resulting Models and Spectras.
+This repository contains files, scripts, and example Jupyter notebooks for spectra modeling from the Hubble Space Telescope secondary eclipse data on exoplanet CoRoT-1 b. The modeling methods laid out in this repository utlizes the [RECTE (Ramp Effect Charge Trapping Eliminator)](https://recte.readthedocs.io/en/latest/index.html) which models and corrects the systematic known as “ramp effect”. The contained scripts already contain a modified copy of RECTE. In particular, this repository contains a reproducible notebook on the full analysis of CoRoT-1 b thus far and a few notebooks that allow one to test how the ramp profiles are created. All required files to run these notebooks are contained here. 
+
 # [Batman](https://www.cfa.harvard.edu/~lkreidberg/batman/index.html) 
 a Python package for fast calculation of exoplanet transit light curves. 
 The package supports calculation of light curves for any radially symmetric stellar limb darkening law, using a new integration algorithm for models that cannot be quickly 
