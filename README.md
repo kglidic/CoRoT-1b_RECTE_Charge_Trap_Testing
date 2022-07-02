@@ -1,4 +1,7 @@
 # CoRoT-1b_RECTE_Charge_Trap_Testing
+
+Atmospheric Characterization of Hot Jupiter CoRoT-1 b Using the Wide Field Camera 3 on the Hubble Space Telescope. Investigating CoRoT-1 b through its secondary eclipses and producing spectrophotometric light curves corrected for charge trapping, also known as the ramp effect in time-series observations with the WFC3. We found that, when correcting for the ramp effect and using the typically discarded first orbit, we are better capable of constraining and optimizing the emission and transmission spectra.
+
 This repository contains files, scripts, and example Jupyter notebooks for spectra modeling from the Hubble Space Telescope secondary eclipse data on exoplanet CoRoT-1 b. The modeling methods laid out in this repository utlizes the [RECTE (Ramp Effect Charge Trapping Eliminator)](https://recte.readthedocs.io/en/latest/index.html) which models and corrects the systematic known as “ramp effect”. The contained scripts already contain a modified copy of RECTE. In particular, this repository contains a reproducible notebook on the full analysis of CoRoT-1 b thus far and a few notebooks that allow one to test how the ramp profiles are created. All required files to run these notebooks are contained here. 
 
 # [Batman](https://www.cfa.harvard.edu/~lkreidberg/batman/index.html) 
