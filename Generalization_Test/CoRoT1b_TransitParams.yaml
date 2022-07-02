@@ -1,0 +1,88 @@
+procFiles: 
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit1/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit2/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit3/*_flt.fits ## files on which to do spec extraction
+    #- /home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/corot1_visit4/*_flt.fits ## files on which to do spec extraction
+   - /fenrirdata1/es_tso/hst/visit01/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit02/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit03/*_flt.fits
+   - /fenrirdata1/es_tso/hst/visit04/*_flt.fits
+
+excludeList:
+   - ibh717giq_flt.fits
+   - ibh719gkq_flt.fits
+   - ibh720i5q_flt.fits
+   - ibh721olq_flt.fits
+
+srcName: CoRoT-1b
+srcNameShort: corot1
+nightName: 
+    - visit1
+    - visit2
+    - visit3
+    - visit4
+dispDirection: x ## dispersion direction 'x' or 'y'
+starPositions: ## positions of the stars in the spatial direction. The first one is the target
+   - 74
+refPhotCentering: null ## photometry fits file where to obtain centroid shifts to apply from 1 star/source
+bkgSubDirections: ['Y'] ## The direction and sequence of background subtractions to do
+bkgRegionsX: ## a list of background regions in the X direction
+   - [null, null]
+bkgOrderX: 0 ## order of polynomial subtraction in the X direction
+bkgRegionsY: ## a list of background regions in the Y direction
+   - 
+       - [9, 32]
+       - [41, 49]
+       - [92, 122]
+   - 
+       - [0, 14]
+       - [25,32]
+       - [39, 56]
+       - [100, 121]
+   - 
+       - [9, 32]
+       - [39, 46]
+       - [92, 122]
+   - 
+       - [9, 32]
+       - [39, 46]
+       - [92, 122]
+bkgOrderY: 1 ## order of polynomial subtraction in the Y direction
+apWidth: 30. ## Source aperture width
+dispPixels: [0, 128] ## pixels to use in the dispersion direction
+numSplineKnots: 6 ## number of spline Knots when fitting the Splines along the dispersion direction
+splineSpecFitOrder: 2 ## order of the Spline to fit along the dispersion direction (for profile & badpix)
+sigForBadPx: 300 ## number of sigma difference from smoothed profile where to mark bad pixels
+jdRef: 2457551 ## JD reference offset to subtract for plotting
+timingMethod: null ## how to assign integration times? None, 'JWSTint' will add int time to exposure start
+isCube: False ## Is the data a cube (3D)?
+cubePlane: 0 ## The plane to choose if data is in cubes
+doCentering: False ## Center the aperturess with Gaussian?
+FITSextension: 1 ## FITS extension of science frames
+HEADextension: 0 ## FITS extension of the header info (for exposure and timing)
+isSlope: True ## Is the FITS image a slope image that should be multiplied by the int time?
+readNoise: 20 ## Read noise in electrons
+detectorGain: 1.0 ## Already in units of e-/s Optionally specify the detector gain e-/DN
+dateFormat: Two Part ## Format of date. "Two Part" is split over DATE-OBS and TIME-OBS, whereas "One Part" is all in DATE-OBS
+itimeKeyword: EXPTIME ## The FITS keyword describing integration time
+lowPassFreqCC: 0.5 ## Below this frequency, all information is included for cross-corr alignment analysis
+hiPassFreqCC: 0.05 ## Above this frequency, all information is included for cross-corr alignment analysis
+nOffsetCC: 3 ##
+waveCalMethod: null ## the wavelength calibration method (None/null, NIRCamTS)
+
+#Transit Parameters for exoplanet CoRoT-1 b. All physcial transit parameters required for Python package `batman`. 
+t0: 2454138.32807                            #Bonomo et al. 2017     #Time of inferior conjunction (days)
+per: 1.5089682                               #Bonomo et al. 2017     #Orbital period (days)
+ax: 4.811125954515018                        #Bonomo et al. 2017     #Semi-major axis (in units of stellar radii)
+inc: 85.15                                   #Bonomo et al. 2017     #Orbital inclination (in degrees)
+ecc: 0.                                      #Bonomo et al. 2017     #Eccentricity
+w:  90.                                      #Bonomo et al. 2017     #Longitude of periastron (in degrees)
+limb_dark: "nonlinear"                                               #Limb darkening model
+u: [0.396, 0.571, -0.748, 0.286]             #Based on HST/WFC3 G141 #Limb darkening coefficients [u1, u2, u3, u4]
+t_secondary: 2454139.0825540996              #t0+0.5*per             #The central eclipse time
+rp: 0.14328293080257234                      #Bonomo et al. 2017     #Planet-to-star radius ratio
+   
+WaveCalMethod: "wfc3Dispersion"              #Modes 'tshirt' supports: Corresponds to instrumentation used. Use ‘NIRCamTS’ for the NIRCam                                                time series mode. Use ‘wfc3Dispersion’ for the HST WFC3 grism
+   
+#Establish a Base Save Directory for all results: All saved data will generate folders so make sure to create a fresh base directory. 
+BaseDir: "/home/kglidic/Software/tshirt_files/tshirt/Corot1_Data/Generalization_Test/"

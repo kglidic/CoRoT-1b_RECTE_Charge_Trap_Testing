@@ -269,8 +269,7 @@ def calculate_correction(csv_file,median_image):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     im = fits.getdata(median_image)
-   # bbox = [0, 128, 59, 89]  # define the bounding box of the area of interest
-    bbox = [0, 128, 69, 79]
+    bbox = [0, 128, 59, 89]  # define the bounding box of the area of interest
     xList = np.arange(bbox[0], bbox[1])
     ramps = np.zeros((len(xList), len(tExp)))
     dTrap_fList = [0]
@@ -343,8 +342,7 @@ def calculate_correction_fast(x,exptime,median_image,dTrap_s=[0],trap_pop_s=200,
     nTime = len(variability)
     
     im = median_image
-   # bbox = [0, 128, 59, 89]  # define the bounding box of the area of interest
-    bbox = [0, 128, 69, 79]
+    bbox = [0, 128, 59, 89]  # define the bounding box of the area of interest
     xList = xList
     
     #dTrap_fList = [0]

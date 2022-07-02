@@ -97,6 +97,15 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
     table_noise = self.print_noise_wavebin(nbins=nbins)
     table_noise=table_noise.to_pandas() #convert to a pandas table
     
+    #Defining the global xList parameter needed in the model functions with RECTE
+    xList_all = [] #empty list to store each wavlengths dispersion indices.
+    #Loop over each wavelength's bin index. The dispersion indices will be different for each wavelength bin. 
+    for ind in table_noise.index: 
+        Disp_st = table_noise['Disp St'][ind] #Start of the dispersion range
+        Disp_end = table_noise['Disp End'][ind] #End of the dispersion range
+        Disp_xList = np.arange(Disp_st, Disp_end,1) #Return Numpy array of evenly spaced values within a given interval. 
+        xList_all.append(Disp_xList) #Append Numpy array to the empty list to late be iterated over.
+    
     #Wavelength calibration to turn the dispersion pixels into wavelengths. 
     #CoRoT-1 b used wavecalMethod='wfc3Dispersion' for the HST WFC3 grism 
     wavelength_list = self.wavecal(table_noise['Disp Mid'],waveCalMethod = 'wfc3Dispersion')    
@@ -110,7 +119,7 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
     
     #Establish the model in use based on initial function input. Establish the parameters and the initial parameter guess values (p0) for each model. 
     if(model==transit_model_RECTE):
-        labels = ["pr", "a", "b","trap_pop_s","dtrap_s", "trap_pop_f", "dtrap_f"]
+        labels = ["rp", "a", "b","trap_pop_s","dtrap_s", "trap_pop_f", "dtrap_f"]
         p0 = [0.13,1.0,0.0,200,100,20,1] #each guess value in the list corresponds to the parameter order in text
         
     elif(model==eclipse_model_RECTE):
@@ -130,11 +139,11 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
     
     #Set up plotting options for the Light Curve
     if (LCPlot==True):
-        fig, (ax2) = plt.subplots(figsize=(20,20)) #Set up the figure space
+        fig, (ax2, ax3, ax4) = plt.subplots(1,3,figsize=(20,10),sharey=False)
     
     #Loop over the flux data and their respective flux data error columns simultaneously for each wavelength. 
     #Each wavelength will have an associated color (determined by the color index) and bin number.  
-    for columns,columns_errors,bin_number,color_idx, wavelength in zip(ydata_columns,ydata_errors_columns,np.arange(nbins),color_idx_range,wavelength_list):
+    for columns,columns_errors,bin_number,color_idx, wavelength,disp_range in zip(ydata_columns,ydata_errors_columns,np.arange(nbins),color_idx_range,wavelength_list,xList_all):
         
         ydata = raw_results[columns].values # Return as a Numpy representation of the data.
         ydata_errors = raw_results_errors[columns_errors].values
@@ -187,6 +196,7 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
         if (os.path.exists(MCMC_file) == True) and (recalculate == False):
             sampler = emcee.backends.HDFBackend(MCMC_file, read_only=True) #A reader for existing samplings
             check_step_size = sampler.get_chain() #Check the MCMC step size
+            print(check_step_size.shape[0])
 
             #If the step size is less than the defined iterations in the function continue MCMC analysis
             if (check_step_size.shape[0] < iterations):
@@ -207,6 +217,7 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
                 start_MCMC = time.time() #Start of the internal timer for MCMC analysis
 
                 backend = emcee.backends.HDFBackend(MCMC_file) #Create a backend that stores the chain in memory
+                backend.reset(nwalkers, ndim) #clear in case file exists
 
                 sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, args=(xdata, ydata, ydata_errors),backend=backend,pool=pool) #instantiating an EnsembleSampler for emcee
                 
@@ -222,11 +233,14 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
         burnin = int(2 * np.max(tau)) #Define the "burn-in" steps for each parameter based on its autocorrelation time. To be discarded.
         thin = int(0.5 * np.min(tau)) #Define how to thin the sampler chain. Take only every "thin" steps from the chain. 
         #print("The Autocorrelation Time is: {0}".format(tau))
-        #print("The Burn-In Steps: {0}".format(burnin))
-        #print("Thin the Sampler Chain by: {0}".format(thin))
+        print("The Burn-In Steps: {0}".format(burnin))
+        print("Thin the Sampler Chain by: {0}".format(thin))
         
         flat_samples = sampler.get_chain(discard=burnin,thin=thin,flat=True) # Flatten the chain so that we have a flat list of samples
-        
+        print(flat_samples.shape)
+        print(sampler.get_chain().shape)
+        print(sampler.get_chain(flat=True).shape)
+
         #Define the 50th Percentile for each parameter; the mean 
         q50 = np.percentile(flat_samples,50,axis=0)
         q50_array.append(q50)
@@ -238,6 +252,9 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
         #Define the 84th Percentile for each parameter; +1 std
         q84 = np.percentile(flat_samples,84,axis=0)
         q84_array.append(q84-q50) #Define the upper unccertainty limit
+        
+        Orbital_phase = np.mod((xdata- 2454138.32807)/1.5089682,1.0) #convert the time in days into orbital phase. This is specifically for CoRoT-1 b. 
+
 
         #Plotting options for the parameter distributions
         if(showPlot==True):
@@ -254,96 +271,107 @@ def MCMC(self,model,iterations,nbins=10,recalculate=False,showPlot=False,LCPlot=
                 #ax.yaxis.set_label_coords(-0.1, 0.5)
             axes[-1].set_xlabel("Step Number");
             
-            corner.corner(flat_samples, labels=labels, quantiles=[0.16, 0.5, 0.84],show_titles=True); #generate a corner plot for each wavebin
-        
+            pltcorner=corner.corner(flat_samples, labels=labels, quantiles=[0.16, 0.5, 0.84],show_titles=True); #generate a corner plot for each wavebin
+            pltcorner.savefig('saved_figures/CoRoT-1b_MCMC_corner_plot_visits_{}_wavelength_ind_{}_nbins{}.pdf'.format(self.param['nightName'],columns,nbins), bbox_inches='tight')
         #Light Curve Plotting
         if(LCPlot==True):
             
             offset = 0.007 #Define an offset between wavebins
         
-            inds = np.random.randint(len(flat_samples), size=10) #Define, at random number, indices of the flat sample to generate models 
+            inds = np.random.randint(len(flat_samples), size=100) #Define, at random number, indices of the flat sample to generate models 
             
+            family_of_models=[]
+            family_of_models_params=[]
             #Loop through these indices
             for ind in inds:
                 sample = flat_samples[ind] #Pull the parameter values at this index as a sample
                 ymodel=model(xdata, *sample) #Plug in these sample values into the model function
+                family_of_models.append(ymodel)
+                family_of_models_params.append(sample)
+                
+                ramp_family=calculate_correction_fast(xdata,exptime,im,xList=xList,trap_pop_s=sample[3], dTrap_s=[sample[4]], trap_pop_f=sample[5], dTrap_f=[sample[6]]) #calculate the ramp in the data based on optimized parameters (sample)
+                ramp_model_family = np.mean(ramp_family,axis=0) #Defing the ramp model; the mean along the rows(axis=0)
+                baseline_model_family=eclipse_model(xdata, 0, sample[1], sample[2]) #define the basline, to be divided out to see only the eclipse later
                 
                 ax2.plot(xdata, ymodel-bin_number*offset, color=plt.cm.gist_heat(color_idx), alpha=0.1) #Plot the family of models
+                ax3.plot(xdata, (ymodel/ramp_model_family/baseline_model_family)-bin_number*offset, color=plt.cm.gist_heat(color_idx), alpha=0.1) #Plot the family of models
+
+            ax2.errorbar(xdata, ydata-bin_number*offset, yerr=ydata_errors, color=plt.cm.gist_heat(color_idx), fmt="o", capsize=3,markersize=3) #Plot the light curves with error bars for each wavebin
+
+            #log_pb = sampler.get_log_prob(discard=burnin,thin=thin,flat=True) #Get the chain of log probabilities evaluated at the MCMC samples
+            #maximum_index = np.argmax(log_pb) #Define the maximum log probability
+            #sample_max = flat_samples[maximum_index] #Pull the parameter values at this index of maximum log probability as sample_max
+            #ymodel_max = model(xdata, *sample_max) #Plug in these sample_max values into the model function
+            #ax2.plot(xdata, ymodel_max-bin_number*offset, color="black",linewidth=3) #Plot the Maximum Likelihood model
+            median_model = np.median(family_of_models, axis=0)#Define the median in the family of models along rows (axis=0).
+            median_model_params=np.median(family_of_models_params, axis=0) #Define the median in the family of models parameters along rows (axis=0)
             
-            ax2.errorbar(xdata, ydata-bin_number*offset, yerr=ydata_errors, color=plt.cm.gist_heat(color_idx), fmt="o", capsize=5) #Plot the light curves with error bars for each wavebin
-
-            log_pb = sampler.get_log_prob(discard=burnin,thin=thin,flat=True) #Get the chain of log probabilities evaluated at the MCMC samples
-            maximum_index = np.argmax(log_pb) #Define the maximum log probability
-            sample_max = flat_samples[maximum_index] #Pull the parameter values at this index of maximum log probability as sample_max
-            ymodel_max = model(xdata, *sample_max) #Plug in these sample_max values into the model function
-            ax2.plot(xdata, ymodel_max-bin_number*offset, color="black",linewidth=3) #Plot the Maximum Likelihood model
-
-            ax2.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.075, np.mean(ydata)-bin_number*offset+0.001),fontsize=25,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+            ax2.plot(xdata, median_model-bin_number*offset, color="black",linewidth=2) #Plot the mean model
             
             #Axis title specific to CoRoT-1b
             if self.param['nightName']=='visit1':
-                ax2.set_title("CoRoT-1b Primary Transit \n Visit 1: $23^{rd}$ January 2012", fontsize=30)
+                fig.suptitle("CoRoT-1b Primary Transit \n Visit 1: $23^{rd}$ January 2012", fontsize=30)
+                #ax2.set_title("CoRoT-1b Primary Transit \n Visit 1: $23^{rd}$ January 2012", fontsize=30)
             elif self.param['nightName']=='visit2':
-                ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 2: $17^{th}$ January 2012", fontsize=30)
+                fig.suptitle("CoRoT-1b Secondary Eclipse \n Visit 2: $17^{th}$ January 2012", fontsize=30)
+                #ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 2: $17^{th}$ January 2012", fontsize=30)
+                ax2.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.085, np.mean(ydata)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax3.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata)-bin_number*offset+0.005),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax4.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata-median_model)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
             elif self.param['nightName']=='visit3':
-                ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 3: $27^{th}$ January 2012", fontsize=30)
+                fig.suptitle("CoRoT-1b Secondary Eclipse \n Visit 3: $27^{th}$ January 2012", fontsize=30)
+                #ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 3: $27^{th}$ January 2012", fontsize=30)
+                ax2.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.085, np.mean(ydata)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax3.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata)-bin_number*offset+0.005),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax4.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata-median_model)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
             elif self.param['nightName']=='visit4':
-                ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 4: $5^{th}$ February 2012", fontsize=30)
+                fig.suptitle("CoRoT-1b Secondary Eclipse \n Visit 4: $5^{th}$ February 2012", fontsize=30)
+                #ax2.set_title("CoRoT-1b Secondary Eclipse \n Visit 4: $5^{th}$ February 2012", fontsize=30)
+                ax2.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.085, np.mean(ydata)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax3.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata)-bin_number*offset+0.005),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
+                ax4.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.078, np.mean(ydata-median_model)-bin_number*offset+0.002),fontsize=10,weight='bold',color=plt.cm.gist_heat(color_idx)) #Annotate the wavelengths on the plot
     
             #Light Curve Plotting Labels/Legend
-            ax2.set_ylabel("Normalized Flux + Offset", fontsize=30)
-            ax2.set_xlabel("Time (BJD)", fontsize = 30)
-            ax2.tick_params(axis='x', labelsize=20)
-            ax2.tick_params(axis='y', labelsize=20)
-            ax2.xaxis.offsetText.set_fontsize(20)
+            ax2.set_ylabel("Normalized Flux + Offset", fontsize=20)
+            ax3.set_xlabel("Time (BJD)", fontsize = 20)
+            #ax2.tick_params(axis='x', labelsize=20)
+            #ax2.tick_params(axis='y', labelsize=20)
+            #ax2.xaxis.offsetText.set_fontsize(20)
 
-            legend_elements = [Line2D([0], [0], color='black', lw=3, label='Maximum Likelihood')]
-            ax2.legend(handles=legend_elements, fontsize=20)
+            legend_elements = [Line2D([0], [0], color='black', lw=2, label='Median Model')]
+            ax2.legend(handles=legend_elements, fontsize=10)
+            ax3.legend(handles=legend_elements, fontsize=10)
             
-            #figure_name='saved_figures/CoRoT-1b_MCMCLightcurve_{}.jpeg'.format(self.param['nightName'])   
-            #fig.savefig(figure_name)
+            ramp=calculate_correction_fast(xdata,exptime,im,xList=xList,trap_pop_s=median_model_params[3], dTrap_s=[median_model_params[4]], trap_pop_f=median_model_params[5], dTrap_f=[median_model_params[6]]) #calculate the ramp in the data based on optimized parameters (median_model_params)
+            ramp_model = np.mean(ramp,axis=0) #Defing the ramp model; the mean along the rows(axis=0)
+            baseline_model=eclipse_model(xdata, 0, median_model_params[1], median_model_params[2]) #define the basline, to be divided out to see only the eclipse later
+            
+            ax3.plot(xdata, (ydata/ramp_model/baseline_model)-bin_number*offset,'o',color=plt.cm.gist_heat(color_idx),markersize=5) 
+            ax3.plot(xdata, (median_model/ramp_model/baseline_model)-bin_number*offset, color="black",linewidth=2) #Plot the mean model astrophysical data only
+
+            #The third plot (ax4) is the residuals of the original data from the median model
+            ax4.plot(xdata, (ydata-median_model)-bin_number*offset,'o',color=plt.cm.gist_heat(color_idx),markersize=5)
+            ax4.yaxis.set_label_position("right")
+            ax4.yaxis.tick_right()
+            ax4.set_ylabel("Residuals + Offset", fontsize=20)
+
+
+            figure_name='saved_figures/CoRoT-1b_MCMCLightcurve_{}.pdf'.format(self.param['nightName'])   
+            fig.savefig(figure_name)
         if (Co_add_visit_check==True):
             
-            Orbital_phase = np.mod((xdata- 2454138.32807)/1.5089682,1.0) #convert the time in days into orbital phase. This is specifically for CoRoT-1 b. 
-
-            #This line is used to save results to a specific folder in order to streamline previously run MCMC generated models. (Can be altered)
-            Family_model_file  = 'Co_add_visit_check/Family_models_visit_{}_wavelength_ind_{}_nbins{}.txt'.format(self.param['nightName'],columns,nbins)
-        
-            #If the previously defined Family_model_file exists and the recalculation parameter is set to False, read it in. 
-            if (os.path.exists(Family_model_file) == True ) and (recalculate == False):
-                family_of_models=np.loadtxt(Family_model_file) #read in the txt file. This file contains a number of possible models for the respective wavelength bins. 
-            
-            #If the previously defined Family_model_file does not exsit or if the recalculation parameter is set to True, generate the possible light curve models and save.  
-            else:
-                family_of_models = [] #an empty list to append the models
-                family_of_models.append(xdata) #apped the time data to these files for reference. 
-                
-                inds = np.random.randint(len(flat_samples), size=100) #Define, at random number, indices of the flat sample to generate models. Size (number of models) can vary 
-                
-                #Loop through these indices
-                for ind in inds:
-                    sample = flat_samples[ind] #Pull the parameter values at this index as a sample
-                    ymodel=model(xdata, *sample) #Plug in these sample values into the model function
-                    family_of_models.append(ymodel) #append the models for this bin into the empty list
-                np.savetxt(Family_model_file,family_of_models) #save the family_of_models as a a text file under the destination Family_model_file
-                
             #This line is used to save results to a specific folder in order to streamline previously run model modifications on the data. (Can be altered)
-            modified_flux_file  = 'Co_add_visit_check/modified_flux_visit_{}_wavelength_ind_{}_nbins{}.csv'.format(self.param['nightName'],columns,nbins)
+            corrected_light_curve_file  = 'Co_add_visit_check/corrected_light_curve_visit_{}_wavelength_ind_{}_nbins{}.csv'.format(self.param['nightName'],columns,nbins)
             
             #If the previously defined modified_flux_file exists and the recalculation parameter is set to False, read it in. 
-            if (os.path.exists(modified_flux_file) == True ) and (recalculate == False):
-                dat = ascii.read(modified_flux_file)
-                orbital_phase=dat['Orbital Phase']
-                mean_model_divided_out = dat['Modified Flux']
+            if (os.path.exists(corrected_light_curve_file) == True ) and (recalculate == False):
+                print("File found.")
                 
             #If the previously defined modified_flux_file does not exsit or if the recalculation parameter is set to True, modify the flux based on the mean model.  
             else:
                 dat_table = Table()
-                mean_model = np.mean(family_of_models[1:], axis=0) #Define the mean in the family of models along rows (axis=0). Ignore the first array (time). 
-                mean_model_divided_out = ydata/mean_model #Divide the raw data by the mean model. 
+                corrected_light_curve = ydata/ramp_model/baseline_model
                 dat_table['Orbital Phase'] = Orbital_phase #save the orbital phase rather than time in days.
-                dat_table['Modified Flux'] = mean_model_divided_out #save the modified flux values
-                dat_table.write(modified_flux_file) #save the table  
-                
-
-    return q50_array,q16_array,q84_array
+                dat_table['Modified Flux'] = corrected_light_curve #save the modified flux values
+                dat_table.write(corrected_light_curve_file) #save the table  
+    return q50_array,q16_array,q84_array,Orbital_phase

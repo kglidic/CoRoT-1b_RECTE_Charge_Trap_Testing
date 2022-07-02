@@ -21,7 +21,7 @@ import yaml
 #Basic imports
 import os
 from astropy.table import QTable
-import astropy.units as u
+import astropy.units as u #
 import numpy as np
 from astropy.io import fits, ascii
 from astropy.table import Table, join
@@ -34,7 +34,7 @@ from multiprocessing import Pool
 #modeling transit/eclipse light curves
 from scipy.optimize import curve_fit
 from scipy.optimize import minimize
-import batman
+import batman #
 import corner
 import emcee
 
@@ -47,53 +47,52 @@ from astropy.coordinates import SkyCoord
 from astropy.coordinates import EarthLocation
 
 #---------------------------------------------------
-def transit_model(x, rp, a, b):
+def transit_model(x, planet_file, rp, a, b):
     '''
-    Models transit light curve based on initial parameters stored in params_transit.
+    Models transit light curve using Python package `batman` based on initial parameters stored in params_transit.
     
     Parameters
     ----------
     
     x: array
-        Time in Julian days 
+        Time in Julian days
+    planet_file: YAML file
+        A YAML file that contains the transit parameters for desired planet 
     rp: int
-        Radius of the planet
+        Planet-to-star radius ratio
     a: int
-        Flux Normalization value
+        Linear regression y-intercept applied to the modeled normalized flux
     b: int
-        Slope Flux Normalization value
+        Linear regression slope applied to the modeled normalized flux
     '''
-    #Get the values specific to CoRoT-1b for planet radius and semi-major axis in units of stellar radii.
-    Rstar = 1.230 * u.Rsun #CoRoT-1 star radius (in units of Solar radii) #Bonomo et al. 2017
-    a_axis = 0.02752 * u.au #semi-major axis (in units of AU) #Bonomo et al. 2017
-    a_over_r = (a_axis/Rstar).si.value #Calculated - semi-major axis (in units of stellar radii)
+    with open(planet_file, "r") as stream:
+        planet_file = yaml.safe_load(stream)
 
     params_transit = batman.TransitParams()                   #Object to store transit parameters
     
-    params_transit.t0 = 2454138.32807 #Bonomo et al. 2017     #time of inferior conjunction (days)
-    params_transit.per = 1.5089682    #Bonomo et al. 2017     #orbital period (days)
-    params_transit.a = a_over_r       #Bonomo et al. 2017     #semi-major axis (in units of stellar radii)
-    params_transit.inc =85.15         #Bonomo et al. 2017     #orbital inclination (in degrees)
-    params_transit.ecc = 0.           #Bonomo et al. 2017     #eccentricity
-    params_transit.w = 90.                                    #longitude of periastron (in degrees)
-    params_transit.limb_dark = "nonlinear"                    #limb darkening model
-    params_transit.u = [0.5, 0.1, 0.1, -0.1]                  #limb darkening coefficients [u1, u2, u3, u4]
-
-
-    params_transit.rp = rp #planet radius will depend on input
-    m = batman.TransitModel(params_transit, x)
+    params_transit.t0 = planet_file['t0']                     #Time of inferior conjunction (days)
+    params_transit.per = planet_file['per']                   #Orbital period (days)
+    params_transit.ax = planet_file['ax']                       #Semi-major axis (in units of stellar radii)
+    params_transit.inc = planet_file['inc']                   #Orbital inclination (in degrees)
+    params_transit.ecc = planet_file['ecc']                   #Eccentricity
+    params_transit.w = planet_file['w']                       #Longitude of periastron (in degrees)
+    params_transit.limb_dark = planet_file['limb_dark']       #Limb darkening model
+    params_transit.u = planet_file['u']                       #Limb darkening coefficients [u1, u2, u3, u4]
     
-    #Modifying the slope: Julian Date(x) - Initial Julian Date(x0) 
+    params_transit.rp = rp                                    #Planet-to-star radius ratio - Will depend on function input
+    m = batman.TransitModel(params_transit, x)                #Initializes model
+    
+    #Modifying the linear regression slope: Julian Date(x) - Initial Julian Date(x0) 
     x0 = np.min(x)
-    flux = m.light_curve(params_transit)*(a+b*(x-x0))
+    flux = m.light_curve(params_transit)*(a+b*(x-x0))         #Calculate the light curve modeled flux
     return flux
 
 #---------------------------------------------------
 
-#one must define the global parameters im, exptime, and xList for each visit
+#One must define the global parameters im, exptime, and xList for each visit outside of this function.
 def transit_model_RECTE(x, rp, a, b, trap_pop_s, dtrap_s, trap_pop_f, dtrap_f):
     '''
-    Models transit light curve based on initial parameters stored in params_transit and RECTE charge trapping parameters. 
+    Models transit light curve using Python package `batman` based on initial parameters stored in params_transit. These transit models         account for charge trapping systematics using Python package `RECTE`. 
     
     Parameters
     ----------
@@ -101,171 +100,167 @@ def transit_model_RECTE(x, rp, a, b, trap_pop_s, dtrap_s, trap_pop_f, dtrap_f):
     x: array
         Time in Julian days 
     rp: int
-        Radius of the planet
+        Planet-to-star radius ratio
     a: int
-        Flux Normalization value
+        Linear regression y-intercept applied to the normalized flux
     b: int
-        Slope Flux Normalization value
-        
+        Linear regression slope applied to the normalized flux
     trap_pop_s: int
-        (default=0)number of initially occupied traps -- slow poplulation
-        
+        (default=0) number of initially occupied traps -- slow poplulation
     trap_pop_f: int
-        (default=0)number of initially occupied traps -- fast poplulation
-    
+        (default=0) number of initially occupied traps -- fast poplulation
     dtrap_s: int
         (default=0, can be either number or list) number of extra
         trapped charge carriers added in the middle of two orbits
         -- slow population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
-    
     dtrap_f: int
         (default=0, can be either number or list) number of extra
          trapped charge carriers added in the middle of two orbits
         -- fast population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
-        
     '''
-    global im
-    global exptime
-    global xList
+    global im                  #Median Image
+    global exptime             #Exposure time
+    global xList               #Dispersion Range
     
     #Define the initial flux for the model based on the regular transit_model function
     flux = transit_model(x,rp,a,b)
     
-    #Define the ramp in the initial flux
+    #Calculate the ramp profile in the initial flux data
     ramp=calculate_correction_fast(x,exptime,im,xList=xList,trap_pop_s=trap_pop_s, dTrap_s=[dtrap_s], trap_pop_f=trap_pop_f, dTrap_f=[dtrap_f])
     
-    #return the modified flux based on the ramp in the data
-    flux_modified = flux*np.mean(ramp,axis=0)
+    #Return the modified flux based on the ramp profile in the data
+    flux_modified = flux*np.mean(ramp,axis=0)         #Calculate the light curve
     return flux_modified
 
 #---------------------------------------------------
-def eclipse_model(x, fp, a, b):
+def eclipse_model(x, fp, a, b, planet_file):
     '''
-    Models eclipse light curve based on initial parameters stored in params_eclipse.
+    Models eclipse light curve using Python package `batman` based on initial parameters stored in params_eclipse.
     
     Parameters
     ----------
     
     x: array
-        Time in days 
-        
+        Time in Julian days 
     fp: int
-        planet-to-star flux ratio
-        
+        Planet-to-star flux ratio
     a: int
-        Flux Normalization value
-        
+        Linear regression y-intercept applied to the normalized flux
     b: int
-        Slope Flux Normalization value
-        
+        Linear regression slope applied to the normalized flux
+    planet_file: str
+        Path to planet's transit parameter .yaml file
     '''
-    #Get the values specific to CoRoT-1b for planet radius and semi-major axis in units of stellar radii.
-    rp =1.715 * u.Rjupiter #planet radius rp (in units of Jupiter radii)  #Bonomo et al. 2017
-    Rstar = 1.230 * u.Rsun #CoRoT-1 star radius (in units of Solar radii) #Bonomo et al. 2017
-    planet_radius = (rp/Rstar).si.value #Calculated - planet radius (in units of stellar radii)
-    a_axis = 0.02752 * u.au #semi-major axis (in units of AU) #Bonomo et al. 2017
-    a_over_r = (a_axis/Rstar).si.value #Calculated - semi-major axis (in units of stellar radii)
+    #Call in file with the planet's transit parameters
+    with open(planet_file, "r") as stream:
+        planet_params = yaml.safe_load(stream)
+        
+    params_eclipse = batman.TransitParams()       #Object to store secondary eclipse parameters
     
-    params_eclipse = batman.TransitParams()       #object to store secondary eclipse parameters
+    params_eclipse.t0 = planet_params['t0']
+    params_eclipse.per = planet_params['per']     
+    params_eclipse.rp =  planet_params['rp']  
+    params_eclipse.a = planet_params['a']        
+    params_eclipse.inc =planet_params['inc']         
+    params_eclipse.ecc = planet_params['ecc']             
+    params_eclipse.w = planet_params['w']                                          
+    params_eclipse.limb_dark = planet_params['limb_dark']                         
+    params_eclipse.u = planet_params['u']               
+    params_eclipse.t_secondary = planet_params['t_secondary']
     
-    params_eclipse.t0 = 2454138.32807   #Bonomo et al. 2017         #time of inferior conjunction (days)
-    params_eclipse.per = 1.5089682      #Bonomo et al. 2017         #orbital period (days)
-    params_eclipse.rp =  planet_radius  #Bonomo et al. 2017         #planet radius (in units of stellar radii)
-    params_eclipse.a = a_over_r         #Bonomo et al. 2017         #semi-major axis (in units of stellar radii)
-    params_eclipse.inc =85.10           #Bonomo et al. 2017         #orbital inclination (in degrees)
-    params_eclipse.ecc = 0.             #Bonomo et al. 2017         #eccentricity
-    params_eclipse.w = 90.                                          #longitude of periastron (in degrees)
-    params_eclipse.limb_dark = "nonlinear"                          #limb darkening model
-    params_eclipse.u = [0.5, 0.1, 0.1, -0.1]                        #limb darkening coefficients [u1, u2, u3, u4]
-    params_eclipse.t_secondary = params_eclipse.t0 + 0.5* 1.5089682 #The central eclipse time
+    params_eclipse.fp = fp/1000000                #Planet-to-star flux ratio (fp) is in ppm - Will depend on function input
     
-    params_eclipse.fp = fp/1000000 #planet-to-star flux ratio in ppm
-    m = batman.TransitModel(params_eclipse, x, transittype="secondary")
+    m = batman.TransitModel(params_eclipse, x, transittype="secondary") #Initializes model
     
-    #Modifying the slope: Julian Date(x) - Initial Julian Date(x0) 
+    #Modifying the linear regression slope: Julian Date(x) - Initial Julian Date(x0) 
     x0 = np.min(x)
-    flux = m.light_curve(params_eclipse)*(a+b*(x-x0)) 
+    flux = m.light_curve(params_eclipse)*(a+b*(x-x0))                   #Calculate the light curve
     return flux
 
 #---------------------------------------------------
 
-#one must define the global parameters im, exptime, and xList for each visit
+#one must define the global parameters im, exptime, and xList for each visit outside of the function
 def eclipse_model_RECTE(x, fp, a, b, trap_pop_s, dtrap_s, trap_pop_f, dtrap_f):
     '''
-    Models eclipse light curve based on initial parameters stored in params_eclipse and RECTE charge trapping parameters.
+    Models eclipse light curve using Python package `batman` based on initial parameters stored in params_eclipse. These transit models         account for charge trapping systematics using Python package `RECTE`. 
     
     Parameters
     ----------
     
     x: array
-        Time in days 
+        Time in Julian days 
     fp: int
-        Planet-to-flux ratio
-    a: int
-        Flux Normalization value
-        
+        Planet-to-star flux ratio
+   a: int
+        Linear regression y-intercept applied to the normalized flux
     b: int
-        Slope Flux Normalization value
-        
+        Linear regression slope applied to the normalized flux
     trap_pop_s: int
-        (default=0)number of initially occupied traps -- slow poplulation
-    
+        (default=0) number of initially occupied traps -- slow poplulation
     trap_pop_f: int
-        (default=0)number of initially occupied traps -- fast poplulation
-    
+        (default=0) number of initially occupied traps -- fast poplulation
     dTrap_s: int
         (default=0, can be either number or list) number of extra
         trapped charge carriers added in the middle of two orbits
         -- slow population. If it is a number, it assumes that all
         the extra added trap charge carriers are the same
-        
      dtrap_f: int
         (default=0, can be either number or list) number of extra
          trapped charge carriers added in the middle of two orbits
         -- fast population. If it is a number, it assumes that all
-        the extra added trap charge carriers are the same
-        
+        the extra added trap charge carriers are the same 
     '''
-    global im
-    global exptime
-    global xList
+    global im                  #Median Image
+    global exptime             #Exposure time
+    global xList               #Dispersion Range
     
     #Define the initial flux for the model based on the regular eclipse_model function
     flux = eclipse_model(x,fp,a,b)
     
-    #Define the ramp in the initial flux
+    #Define the ramp profile in the initial flux data
     ramp=calculate_correction_fast(x,exptime,im,xList=xList,trap_pop_s=trap_pop_s, dTrap_s=[dtrap_s], trap_pop_f=trap_pop_f, dTrap_f=[dtrap_f])
     
-    #return the modified flux based on the ramp in the data
-    flux_modified = flux*np.mean(ramp,axis=0)
+    #return the modified flux based on the ramp profile in the data
+    flux_modified = flux*np.mean(ramp,axis=0)      #Calculate the light curve
     return flux_modified
 
 #---------------------------------------------------
 
 def barycenter_correction(self):
-    t1, t2 = self.get_wavebin_series()
-    head = fits.getheader(self.fileL[0])
+    """
+    Barycenter correction for the time.  
+    
+    Parameters
+    ----------
+    
+    self: keyword
+        Spectrometry Object
+    """
+    
+    t1, t2 = self.get_wavebin_series()               #Get a table of the the wavelength-binned time series (`tshirt`)
+    head = fits.getheader(self.fileL[0])             #Open header information
     #print("Time from tshirt: {}".format(t1['Time'][0]))
     
-    expStartJD = head['EXPSTART'] + 2400000.5
+    expStartJD = head['EXPSTART'] + 2400000.5        #Start time in JD
     #print("Time from EXPSTART keyword {}".format(expStartJD))
     
-    t1 = Time(t1['Time'][0],format='jd')
+    t1 = Time(t1['Time'][0],format='jd')             #Time data
     coord = SkyCoord('06 48 19.1724141241 -03 06 07.710423478',unit=(u.hourangle,u.deg))
     loc = EarthLocation.of_site('keck')
-    diff = t1.light_travel_time(coord,location=loc)
+    diff = t1.light_travel_time(coord,location=loc) #Time difference
     #print('Travel Time from Keck to Barycenter= {} min'.format((diff / u.min).si))
     
-    return (diff / u.day).si
+    
+    return (diff / u.day).si #Barycenter corrected time.
 
 #-----------------------------------------------------
 
 def optimize_batman_model(self,model,nbins=10,showPlot=False):
     """
     Optimizes batman model light curves (for transits and/or secondary eclipses) based on initial parameters. 
-    This function does not consider RECTE charge trapping parameters. 
+    This function does NOT consider `RECTE` charge trapping parameters. 
     This function utilizies the scipy.optimize.curve_fit model fitting approach. 
     
     Parameters
@@ -273,19 +268,15 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
     
     self: keyword
         Spectrometry Object
-    
     model: function
-        A function that models either transits or secondary eclipses. Must be previously defined.
-    
+        A function that models either transits or secondary eclipses. Must be previously defined (transit_model or eclipse_model).
     nbins: int
         The number of wavelength bins. The Default is "nbins=10".
-        
     showPlot: bool
         Make the plot visible? The Default is "False"
-        
     """
    
-    #Obtain a table of the the wavelength-binned time series. 
+    #Obtain a table of the the wavelength-binned time series (with `tshirt`). 
     #Seperate out the raw flux data (raw_results) and the raw flux error data (raw_results_errors) into two different pandas tables.
     results = self.get_wavebin_series(nbins=nbins)
     raw_results = results[0].to_pandas()
@@ -294,7 +285,7 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
     #Call the barycenter time correction function. Will return correction in days. 
     time_correction = barycenter_correction(self)
     
-    #Define the axis columns as well as the corresponding errors.
+    #Define the axis columns as well as the corresponding error columns.
     ydata_columns = raw_results.columns[1:].values #Skip over the time column
     ydata_errors_columns = raw_results_errors.columns[1:].values #Skip over the time column
     xdata = raw_results['Time'].values+time_correction #Time column data in terms of days accounting for Solar barycenter correction
@@ -309,7 +300,12 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
     
     #Define empty lists to store scipy.optimize.curve_fit results.
     popt_list=[] #Optimal values for the parameters so that the sum of the squared residuals of f(xdata, *popt) - ydata is minimized.
-    pcov_list=[] #List of one standard deviation errors on the parameters. 
+    pcov_list=[] #List of one standard deviation errors on the parameters.
+    
+    #Plotting options
+    if(showPlot==True):
+        
+        fig, (ax, ax2) = plt.subplots(1,2,figsize=(20,10),sharey=False) #Set up the figure space
     
     #Establish the model in use based on initial function input. Establish the parameters and the initial parameter guess values (p0) for each model. 
     if(model==transit_model):
@@ -321,8 +317,11 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
     else: 
         print("Invalid Model Input") #This function only works on the above previously defined models!
     
-    #Loop over the flux data and their respective flux data error columns simultaneously for each wavelength. 
-    for columns, columns_errors, wavelength in zip(ydata_columns,ydata_errors_columns,wavelength_list):
+    #Establsih a color map index, to be iterated over, based on the number of wavebins defined. 
+    color_idx_range = np.linspace(0.3, 0.8, nbins)
+    
+    #Loop over the flux data and their respective flux data error columns simultaneously for each wavelength. will loop over a color index and bin number for plotting purposes.  
+    for columns, columns_errors,bin_number,color_idx,wavelength in zip(ydata_columns,ydata_errors_columns,np.arange(nbins),color_idx_range,wavelength_list):
         
         #Trim the data used in the model. Exclude the first orbit in each visit since RECTE is not optimized here and the ramp profile is still prevalent. 
         #Specific to CoRoT-1 b data, first orbit ends at data point 23. This will change depending on data. 
@@ -341,18 +340,19 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
         #Light Curve Plotting Options
         if(showPlot==True):
             
-            fig, ax =plt.subplots() #Define the figure space
+            offset = 0.007 #set an offset between each wavelegnth's light curve.
             
-            #Plot all orbitial data but, the model excludes the first orbit.
-            ax.plot(xdata_trimmed, model(xdata_trimmed, *popt), 'r-',
-                    label=text % tuple(popt)) #The *popt will grab the optimized parameters required for the model. 
-
-            ax.plot(xdata, raw_results[columns],'o') #Plot the time data vs. initial flux data
+            #The first plot (ax) is the original light curves with the models overlaid. 
+            ax.plot(xdata_trimmed, model(xdata_trimmed, *popt)-bin_number*offset, 'r-',
+                    label=text % tuple(popt))  #The *popt will grab the optimized parameters required for the model. 
+            ax.plot(xdata, raw_results[columns]-bin_number*offset,'o',color=plt.cm.gist_heat(color_idx),alpha=0.8) #Plot the time data vs. initial flux data - no model
             
-            #Axis labels
-            ax.set_xlabel('Time (JD)')
+            #plot labels
+            ax.set_xlabel('Time (BJD)')
             ax.set_ylabel('Normalized Flux')
-            ax.set_title('Wavelength ='+str(wavelength))
+            ax.set_title('CoRoT-1 b Light Curves')
+            ax.annotate("{:.2f}$\mu m$".format(wavelength), xy =(np.mean(xdata)-0.09, np.mean(ydata)-bin_number*offset+0.002),fontsize=15,color=plt.cm.gist_heat(color_idx)) #annotation for wavelength values
+            
 
     return popt_list,pcov_list
 
@@ -361,8 +361,8 @@ def optimize_batman_model(self,model,nbins=10,showPlot=False):
 def optimize_batman_model_RECTE(self,model,nbins=10,showPlot=False,recalculate=False):
     
     """
-    Optimizes batman model light curves (for transits and/or secondary eclipses) based on initial parameters. 
-    This function does consider RECTE charge trapping parameters. 
+    Optimizes `batman` model light curves (for transits and/or secondary eclipses) based on initial parameters. 
+    This function does consider `RECTE` charge trapping parameters. 
     This function utilizies the scipy.optimize.curve_fit model fitting approach. 
     
     Parameters
@@ -370,9 +370,8 @@ def optimize_batman_model_RECTE(self,model,nbins=10,showPlot=False,recalculate=F
     
     self: keyword
         Spectrometry Object
-    
     model: function
-        A function that models either transits or secondary eclipses that encorporate RECTE charge trapping parameters . 
+        A function that models either transits or secondary eclipses that encorporate `RECTE` charge trapping parameters (transit_model_RECTE or eclipse_model_RECTE). 
         Must be previously defined.
     
     nbins: int
@@ -430,7 +429,7 @@ def optimize_batman_model_RECTE(self,model,nbins=10,showPlot=False,recalculate=F
     
     #Establish the model in use based on initial function input. Establish the parameters and the initial parameter guess values (p0) for each model. 
     if(model==transit_model_RECTE):
-        text = 'fit: pr=%5.3f, a=%5.3f,b=%5.3f,trap_pop_s=%5.3f,dtrap_s=%5.3f,trap_pop_f=%5.3f,dtrap_f=%5.3f'
+        text = 'fit: rp=%5.3f, a=%5.3f,b=%5.3f,trap_pop_s=%5.3f,dtrap_s=%5.3f,trap_pop_f=%5.3f,dtrap_f=%5.3f'
         p0 = [0.13,1.0,0.0,200,200,20,1] #each guess value in the list corresponds to the parameter order in text
     elif(model ==eclipse_model_RECTE):
         text = 'fit: fp=%5.3f, a=%5.3f,b=%5.3f,trap_pop_s=%5.3f,dtrap_s=%5.3f,trap_pop_f=%5.3f,dtrap_f=%5.3f'
