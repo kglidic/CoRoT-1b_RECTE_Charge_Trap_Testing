@@ -1,0 +1,7 @@
+bokeh
+numpy
+scipy
+batman-package
+tshirt
+pandas
+corner
